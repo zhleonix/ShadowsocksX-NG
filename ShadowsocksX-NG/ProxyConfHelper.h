@@ -22,4 +22,6 @@
 
 + (void)startMonitorPAC;
 
++ (void)startPACProxy;
+
 @end

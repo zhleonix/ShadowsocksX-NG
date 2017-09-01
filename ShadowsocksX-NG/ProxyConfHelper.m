@@ -8,6 +8,10 @@
 
 #import "ProxyConfHelper.h"
 #import "proxy_conf_helper_version.h"
+#import <ifaddrs.h>
+#import <net/if.h>
+#import <netdb.h>
+
 
 #define kShadowsocksHelper @"/Library/Application Support/ShadowsocksX-NG/proxy_conf_helper"
 
@@ -132,6 +136,11 @@ GCDWebServer *webServer =nil;
     [self callHelper:args];
 }
 
++ (void) startPACProxy {
+    NSString* PACFilePath = [self getPACFilePath];
+    [self startPACServer: PACFilePath];
+}
+
 + (void)enableGlobalProxy {
     NSUInteger port = [[NSUserDefaults standardUserDefaults]integerForKey:@"LocalSocks5.ListenPort"];
     
@@ -190,7 +199,24 @@ GCDWebServer *webServer =nil;
                       requestClass:[GCDWebServerRequest class]
                       processBlock:^GCDWebServerResponse *(GCDWebServerRequest *request)
     {
-        GCDWebServerDataResponse* resp = [GCDWebServerDataResponse responseWithData:originalPACData
+        __block NSData *pacData = originalPACData;
+        const struct sockaddr* addr = (const struct sockaddr*)[request localAddressData].bytes;
+        char hostBuffer[NI_MAXHOST];
+        char serviceBuffer[NI_MAXSERV];
+        if (getnameinfo(addr, addr->sa_len, hostBuffer, sizeof(hostBuffer), serviceBuffer, sizeof(serviceBuffer), NI_NUMERICHOST | NI_NUMERICSERV | NI_NOFQDN) == 0)
+        {
+            NSString* remoteAddr = [NSString stringWithUTF8String:hostBuffer];
+            if (![remoteAddr isEqualToString:@"127.0.0.1"]) {
+                NSString *pacContent =  [[NSString alloc] initWithData:originalPACData encoding:NSUTF8StringEncoding];
+                NSString *respPac = [pacContent stringByReplacingOccurrencesOfString:@"127.0.0.1" withString:remoteAddr];
+                pacData = [respPac dataUsingEncoding: NSUTF8StringEncoding];
+                
+                
+                
+            }
+
+        }
+        GCDWebServerDataResponse* resp = [GCDWebServerDataResponse responseWithData:pacData
                                                                         contentType:@"application/x-ns-proxy-autoconfig"];
         return resp;
     }
@@ -200,7 +226,15 @@ GCDWebServer *webServer =nil;
     
     int port = (short)[defaults integerForKey:@"PacServer.ListenPort"];
     
-    [webServer startWithOptions:@{@"BindToLocalhost":@YES, @"Port":@(port)} error:nil];
+    NSString *httpAddr = [defaults stringForKey:@"LocalHTTP.ListenAddress"];
+    
+    if ([httpAddr isEqualToString:@"127.0.0.1"])
+    {
+        [webServer startWithOptions:@{@"BindToLocalhost":@YES, @"Port":@(port)} error:nil];
+    }
+    else {
+        [webServer startWithOptions:@{@"BindToLocalhost":@NO, @"Port":@(port)} error:nil];
+    }
 }
 
 + (void)stopPACServer {

@@ -207,6 +207,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 ProxyConfHelper.enableGlobalProxy()
             } else if mode == "manual" {
                 ProxyConfHelper.disableProxy()
+                ProxyConfHelper.startPACProxy()
             }
         } else {
             ProxyConfHelper.disableProxy()
